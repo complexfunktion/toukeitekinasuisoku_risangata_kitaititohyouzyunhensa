@@ -149,14 +149,14 @@
   }
   .box-area{
     position:relative;
-    width:220px;
-    height:220px;
+    width:400px;
+    height:400px;
     display:flex;
     align-items:center;
     justify-content:center;
   }
   .box-area img.box-img{
-    width:190px;
+    width:380px;
     height:auto;
     filter:drop-shadow(0 10px 18px rgba(0,0,0,0.4));
     user-select:none;
@@ -278,7 +278,7 @@
 <div class="stage">
   <header class="title">
     <h1>ルーブル紙幣の抽選シミュレーター</h1>
-    <p>箱の中の2000枚から1枚を復元抽出 —— 平均と散らばり具合(標準偏差)を体験する</p>
+    <p>箱の中の2000枚から1枚を取り出す —— 平均と散らばり具合</p>
   </header>
 
   <!-- 左上：統計パネル -->
@@ -293,7 +293,7 @@
     <div class="stats-row stats-main"><span class="label">合計 引いた回数</span><span class="num" id="total">0</span></div>
     <div class="stats-divider"></div>
     <div class="stats-main">平均値：<span class="num" id="mean">— ルーブル</span></div>
-    <div class="stats-main">散らばり具合(標準偏差)：<span class="num" id="std">—</span></div>
+    <div class="stats-main">散らばり具合：<span class="num" id="std">—</span></div>
     <button class="reset-link" id="resetBtn">記録をリセットする</button>
   </div>
 
@@ -303,7 +303,7 @@
     <div class="plot-legend">
       <span><span class="dot"></span>引いた紙幣</span>
       <span><span class="lineswatch"></span>平均値</span>
-      <span><span class="bandswatch"></span>平均 ± 標準偏差</span>
+      <span><span class="bandswatch"></span>平均 ± (散らばり具合)</span>
     </div>
     <canvas id="plot" width="900" height="380"></canvas>
   </div>
