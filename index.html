@@ -31,12 +31,18 @@
     overflow-x:hidden;
   }
   .stage{
-    position:relative;
+    display:grid;
+    grid-template-columns: 280px minmax(260px, 1fr) minmax(360px, 480px);
+    grid-template-rows: auto 1fr;
+    column-gap:28px;
+    row-gap:16px;
     width:100%;
     min-height:100vh;
     padding:24px;
+    align-items:start;
   }
   header.title{
+    grid-column: 1 / 4;
     text-align:center;
     padding:6px 0 4px;
   }
@@ -55,10 +61,9 @@
 
   /* ---------- top-left stats panel ---------- */
   .stats-panel{
-    position:absolute;
-    top:80px;
-    left:24px;
-    width:260px;
+    grid-column: 1;
+    grid-row: 2;
+    width:100%;
     background:rgba(18,59,60,0.9);
     border:1px solid var(--line);
     border-radius:10px;
@@ -97,10 +102,9 @@
 
   /* ---------- top-right plot panel ---------- */
   .plot-panel{
-    position:absolute;
-    top:80px;
-    right:24px;
-    width:min(46vw, 520px);
+    grid-column: 3;
+    grid-row: 2;
+    width:100%;
     background:rgba(18,59,60,0.9);
     border:1px solid var(--line);
     border-radius:10px;
@@ -134,10 +138,10 @@
 
   /* ---------- center: box + draw stage ---------- */
   .center-wrap{
-    position:absolute;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
+    grid-column: 2;
+    grid-row: 2;
+    align-self:center;
+    justify-self:center;
     display:flex;
     flex-direction:column;
     align-items:center;
@@ -255,18 +259,18 @@
   }
   .reset-link:hover{ color:var(--gold-soft); }
 
-  @media (max-width: 880px){
-    .stats-panel, .plot-panel{
-      position:static;
+  @media (max-width: 980px){
+    .stage{
+      display:flex;
+      flex-direction:column;
+      padding:16px;
+    }
+    .stats-panel, .plot-panel, .center-wrap{
       width:100%;
-      margin-bottom:16px;
     }
     .center-wrap{
-      position:static;
-      transform:none;
-      margin:20px auto;
+      margin:12px auto;
     }
-    .stage{ display:flex; flex-direction:column; }
   }
 </style>
 </head>
@@ -508,18 +512,35 @@ function drawPlot(){
   ctx.fillText("金額（ルーブル）", (PLOT.marginLeft + W - PLOT.marginRight)/2, plotBottom+34);
 
   // --- 黒いドット（積み上げ） ---
+  // 最も頻度が高い額面の積み上げが、ちょうどプロット上端に届くように
+  // ドットの直径を毎回スケーリングし直す（隣の額面と重ならない範囲で上限も設ける）。
   const maxFreq = Math.max(1, ...DENOMINATIONS.map(d=>countsByValue[d.value]));
-  const dotDiameter = Math.min(14, Math.max(2, (plotHeight-6) / maxFreq));
+  const topPad = 4; // 上端の余白
+  const minGapBetweenDenoms = Math.min(
+    ...DENOMINATIONS.slice(1).map((d,i)=> xScale(d.value) - xScale(DENOMINATIONS[i].value))
+  );
+  const maxDotByWidth = Math.max(6, minGapBetweenDenoms * 0.9);
+  const MIN_DOT = 3; // ドットが小さくなりすぎて見えなくならないための下限（描画サイズ自体はこれ以上縮めない）
+  const availableHeight = plotHeight - topPad;
+
+  let dotDiameter = availableHeight / maxFreq;
+  dotDiameter = Math.min(dotDiameter, maxDotByWidth, 14);
+  dotDiameter = Math.max(dotDiameter, MIN_DOT);
 
   ctx.fillStyle = "rgba(15,15,15,0.75)";
   DENOMINATIONS.forEach(d=>{
     const n = countsByValue[d.value];
+    if (n === 0) return;
     const x = xScale(d.value);
+    // 回数が多くなり、このドットの大きさのままでは上端に収まらない場合は、
+    // その額面だけ縦の間隔を詰めて（重なりを許容して）必ず全ての回数分を描画する。
+    // → 以前は上端をはみ出す分を描画せずに打ち切っていたため、回数が多いと
+    //   一定数より上のドットが表示されなくなる不具合があった。
+    const step = Math.min(dotDiameter, availableHeight / n);
     for (let i=0;i<n;i++){
-      const y = plotBottom - dotDiameter*0.6 - i*dotDiameter;
-      if (y < plotTop) break; // 収まりきらない分は密度で表現（重なり許容）
+      const y = plotBottom - step*0.5 - i*step;
       ctx.beginPath();
-      ctx.arc(x, y, dotDiameter*0.42, 0, Math.PI*2);
+      ctx.arc(x, y, dotDiameter*0.46, 0, Math.PI*2);
       ctx.fill();
     }
   });
