@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ルーブル紙幣の抽選 — 平均と散らばり具合を体験する</title>
+<style>
+  :root{
+    --bg-deep:#0e2a2b;
+    --bg-panel:#123b3c;
+    --line:#2f6062;
+    --gold:#c9a24b;
+    --gold-soft:#e6cd8a;
+    --paper:#f4ecda;
+    --ink:#1c1c1c;
+    --blue:#2f6fed;
+    --red:#e0473f;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;
+    padding:0;
+    width:100%;
+    height:100%;
+    background:
+      radial-gradient(circle at 20% 15%, #163f40 0%, transparent 45%),
+      radial-gradient(circle at 85% 80%, #163f40 0%, transparent 40%),
+      var(--bg-deep);
+    color:var(--paper);
+    font-family: "Yu Gothic", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    overflow-x:hidden;
+  }
+  .stage{
+    position:relative;
+    width:100%;
+    min-height:100vh;
+    padding:24px;
+  }
+  header.title{
+    text-align:center;
+    padding:6px 0 4px;
+  }
+  header.title h1{
+    font-size:1.15rem;
+    letter-spacing:0.12em;
+    margin:0;
+    font-weight:600;
+    color:var(--gold-soft);
+  }
+  header.title p{
+    margin:4px 0 0;
+    font-size:0.75rem;
+    color:#9fc7c6;
+  }
+
+  /* ---------- top-left stats panel ---------- */
+  .stats-panel{
+    position:absolute;
+    top:80px;
+    left:24px;
+    width:260px;
+    background:rgba(18,59,60,0.9);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 18px;
+    backdrop-filter: blur(2px);
+    box-shadow:0 6px 18px rgba(0,0,0,0.25);
+  }
+  .stats-panel h2{
+    margin:0 0 10px;
+    font-size:0.85rem;
+    letter-spacing:0.08em;
+    color:var(--gold-soft);
+    border-bottom:1px solid var(--line);
+    padding-bottom:6px;
+  }
+  .stats-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:0.78rem;
+    padding:2px 0;
+    color:#dff0ee;
+  }
+  .stats-row span.label{ color:#9fc7c6; }
+  .stats-row span.val{ font-variant-numeric: tabular-nums; font-weight:600; }
+  .stats-divider{ height:1px; background:var(--line); margin:8px 0; }
+  .stats-main{
+    font-size:0.82rem;
+    padding:3px 0;
+  }
+  .stats-main .num{
+    font-size:1.05rem;
+    font-weight:700;
+    color:var(--gold-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- top-right plot panel ---------- */
+  .plot-panel{
+    position:absolute;
+    top:80px;
+    right:24px;
+    width:min(46vw, 520px);
+    background:rgba(18,59,60,0.9);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 16px 10px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.25);
+  }
+  .plot-panel h2{
+    margin:0 0 6px;
+    font-size:0.85rem;
+    letter-spacing:0.08em;
+    color:var(--gold-soft);
+  }
+  .plot-legend{
+    display:flex;
+    gap:14px;
+    font-size:0.68rem;
+    color:#bcdcd9;
+    margin-bottom:4px;
+    flex-wrap:wrap;
+  }
+  .plot-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#111;margin-right:4px;vertical-align:middle;}
+  .plot-legend .lineswatch{display:inline-block;width:14px;height:2px;background:var(--blue);margin-right:4px;vertical-align:middle;}
+  .plot-legend .bandswatch{display:inline-block;width:14px;height:8px;background:rgba(224,71,63,0.35);border:1px solid rgba(224,71,63,0.7);margin-right:4px;vertical-align:middle;}
+  canvas#plot{
+    width:100%;
+    height:auto;
+    background:var(--paper);
+    border-radius:6px;
+    display:block;
+  }
+
+  /* ---------- center: box + draw stage ---------- */
+  .center-wrap{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:22px;
+  }
+  .box-area{
+    position:relative;
+    width:220px;
+    height:220px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .box-area img.box-img{
+    width:190px;
+    height:auto;
+    filter:drop-shadow(0 10px 18px rgba(0,0,0,0.4));
+    user-select:none;
+    -webkit-user-drag:none;
+  }
+  .box-fallback{
+    width:190px;
+    height:150px;
+    border:3px solid var(--gold);
+    border-radius:8px;
+    background:
+      repeating-linear-gradient(45deg, #1a4a4b 0 10px, #163f40 10px 20px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    font-size:0.8rem;
+    color:var(--gold-soft);
+    padding:10px;
+  }
+
+  .bill-pop{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-58%) scale(0.85);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.35s ease, transform 0.35s ease;
+    z-index:5;
+    text-align:center;
+  }
+  .bill-pop.show{
+    opacity:1;
+    transform:translate(-50%,-58%) scale(1);
+  }
+  .bill-pop.fadeout{
+    opacity:0;
+    transform:translate(-50%,-70%) scale(0.92);
+  }
+  .bill-pop img{
+    display:block;
+    filter:drop-shadow(0 8px 14px rgba(0,0,0,0.45));
+    user-select:none;
+    -webkit-user-drag:none;
+  }
+  .bill-fallback-note{
+    border-radius:6px;
+    border:2px solid var(--gold);
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:700;
+    box-shadow:0 8px 14px rgba(0,0,0,0.45);
+  }
+  .bill-pop .cap{
+    margin-top:6px;
+    font-size:0.72rem;
+    color:var(--gold-soft);
+    background:rgba(14,42,43,0.85);
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:10px;
+  }
+
+  .buttons{
+    display:flex;
+    gap:14px;
+  }
+  .buttons button{
+    font-family:inherit;
+    font-size:0.85rem;
+    letter-spacing:0.03em;
+    padding:10px 18px;
+    border-radius:8px;
+    border:1px solid var(--gold);
+    background:linear-gradient(180deg, #1a4a4b, #123b3c);
+    color:var(--gold-soft);
+    cursor:pointer;
+    transition:transform 0.12s ease, background 0.12s ease;
+  }
+  .buttons button:hover{
+    background:linear-gradient(180deg, #205b5c, #163f40);
+    transform:translateY(-1px);
+  }
+  .buttons button:active{
+    transform:translateY(1px);
+  }
+
+  .reset-link{
+    margin-top:2px;
+    font-size:0.7rem;
+    color:#7fa8a6;
+    background:none;
+    border:none;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+  .reset-link:hover{ color:var(--gold-soft); }
+
+  @media (max-width: 880px){
+    .stats-panel, .plot-panel{
+      position:static;
+      width:100%;
+      margin-bottom:16px;
+    }
+    .center-wrap{
+      position:static;
+      transform:none;
+      margin:20px auto;
+    }
+    .stage{ display:flex; flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <header class="title">
+    <h1>ルーブル紙幣の抽選シミュレーター</h1>
+    <p>箱の中の2000枚から1枚を復元抽出 —— 平均と散らばり具合(標準偏差)を体験する</p>
+  </header>
+
+  <!-- 左上：統計パネル -->
+  <div class="stats-panel">
+    <h2>抽選結果</h2>
+    <div class="stats-row"><span class="label">100ルーブル</span><span class="val" id="cnt100">0 回</span></div>
+    <div class="stats-row"><span class="label">200ルーブル</span><span class="val" id="cnt200">0 回</span></div>
+    <div class="stats-row"><span class="label">1000ルーブル</span><span class="val" id="cnt1000">0 回</span></div>
+    <div class="stats-row"><span class="label">2000ルーブル</span><span class="val" id="cnt2000">0 回</span></div>
+    <div class="stats-row"><span class="label">5000ルーブル</span><span class="val" id="cnt5000">0 回</span></div>
+    <div class="stats-divider"></div>
+    <div class="stats-row stats-main"><span class="label">合計 引いた回数</span><span class="num" id="total">0</span></div>
+    <div class="stats-divider"></div>
+    <div class="stats-main">平均値：<span class="num" id="mean">— ルーブル</span></div>
+    <div class="stats-main">散らばり具合(標準偏差)：<span class="num" id="std">—</span></div>
+    <button class="reset-link" id="resetBtn">記録をリセットする</button>
+  </div>
+
+  <!-- 右上：ドットプロット -->
+  <div class="plot-panel">
+    <h2>ドットプロット</h2>
+    <div class="plot-legend">
+      <span><span class="dot"></span>引いた紙幣</span>
+      <span><span class="lineswatch"></span>平均値</span>
+      <span><span class="bandswatch"></span>平均 ± 標準偏差</span>
+    </div>
+    <canvas id="plot" width="900" height="380"></canvas>
+  </div>
+
+  <!-- 中央：箱・出た紙幣・ボタン -->
+  <div class="center-wrap">
+    <div class="box-area" id="boxArea">
+      <img class="box-img" id="boxImg" src="images/box.png" alt="紙幣が入った箱" draggable="false">
+      <div class="bill-pop" id="billPop">
+        <div id="billImgWrap"></div>
+        <div class="cap" id="billCap"></div>
+      </div>
+    </div>
+    <div class="buttons">
+      <button id="btn1">1回引く</button>
+      <button id="btn10">10回引く</button>
+      <button id="btn100">100回引く</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------
+   紙幣の構成（箱の中身）
+   復元抽出：毎回同じ確率で独立に抽選する（枚数は減らない）
+------------------------------------------------------------- */
+const DENOMINATIONS = [
+  { value: 100,  count: 1000, img: "images/bill_100.png",  w: 140, color: "#7fae6e" },
+  { value: 200,  count: 500,  img: "images/bill_200.png",  w: 148, color: "#5f8fc7" },
+  { value: 1000, count: 300,  img: "images/bill_1000.png", w: 156, color: "#c9986a" },
+  { value: 2000, count: 150,  img: "images/bill_2000.png", w: 164, color: "#8f6bb0" },
+  { value: 5000, count: 50,   img: "images/bill_5000.png", w: 172, color: "#c25a5a" },
+];
+const TOTAL_NOTES = DENOMINATIONS.reduce((s,d)=>s+d.count,0); // 2000
+
+// 累積確率テーブル（復元抽出：割合は箱の枚数比のまま固定）
+const cumulative = [];
+{
+  let acc = 0;
+  for (const d of DENOMINATIONS){
+    acc += d.count / TOTAL_NOTES;
+    cumulative.push(acc);
+  }
+}
+
+function drawOneNote(){
+  const r = Math.random();
+  for (let i=0;i<cumulative.length;i++){
+    if (r <= cumulative[i]) return DENOMINATIONS[i];
+  }
+  return DENOMINATIONS[DENOMINATIONS.length-1];
+}
+
+/* ------------------------------------------------------------
+   状態（累計で保持する）
+------------------------------------------------------------- */
+let history = [];               // 引いた金額の配列（累計）
+let countsByValue = {};         // 額面ごとの回数
+DENOMINATIONS.forEach(d => countsByValue[d.value] = 0);
+
+function mean(arr){
+  if (arr.length === 0) return 0;
+  return arr.reduce((s,v)=>s+v,0) / arr.length;
+}
+function stdev(arr){
+  if (arr.length === 0) return 0;
+  const m = mean(arr);
+  const variance = arr.reduce((s,v)=>s + (v-m)*(v-m), 0) / arr.length; // 母標準偏差（観測データの散らばり）
+  return Math.sqrt(variance);
+}
+
+/* ------------------------------------------------------------
+   紙幣画像の表示（出た紙幣を見せて、約5秒後に消す）
+------------------------------------------------------------- */
+let hideTimer = null;
+function showBill(denom){
+  const pop = document.getElementById("billPop");
+  const wrap = document.getElementById("billImgWrap");
+  const cap = document.getElementById("billCap");
+
+  wrap.innerHTML = "";
+  const img = document.createElement("img");
+  img.src = denom.img;
+  img.alt = denom.value + "ルーブル紙幣";
+  img.style.width = denom.w + "px";
+  img.style.height = "auto";
+  img.onerror = function(){
+    wrap.innerHTML = "";
+    const fb = document.createElement("div");
+    fb.className = "bill-fallback-note";
+    fb.style.width = denom.w + "px";
+    fb.style.height = Math.round(denom.w*0.46) + "px";
+    fb.style.background = denom.color;
+    fb.textContent = denom.value + " ₽";
+    wrap.appendChild(fb);
+  };
+  wrap.appendChild(img);
+  cap.textContent = denom.value.toLocaleString() + " ルーブル";
+
+  pop.classList.remove("fadeout");
+  // 再トリガーのためreflow
+  void pop.offsetWidth;
+  pop.classList.add("show");
+
+  if (hideTimer) clearTimeout(hideTimer);
+  hideTimer = setTimeout(()=>{
+    pop.classList.add("fadeout");
+    pop.classList.remove("show");
+  }, 5000);
+}
+
+/* 箱画像が読み込めない場合のフォールバック */
+document.getElementById("boxImg").onerror = function(){
+  const area = document.getElementById("boxArea");
+  const box = document.getElementById("boxImg");
+  box.remove();
+  const fb = document.createElement("div");
+  fb.className = "box-fallback";
+  fb.textContent = "箱\n(images/box.png を用意してください)";
+  fb.style.whiteSpace = "pre-line";
+  area.prepend(fb);
+};
+
+/* ------------------------------------------------------------
+   統計パネルの更新
+------------------------------------------------------------- */
+function updateStatsPanel(){
+  DENOMINATIONS.forEach(d=>{
+    document.getElementById("cnt"+d.value).textContent = countsByValue[d.value].toLocaleString() + " 回";
+  });
+  document.getElementById("total").textContent = history.length.toLocaleString();
+  if (history.length === 0){
+    document.getElementById("mean").textContent = "— ルーブル";
+    document.getElementById("std").textContent = "—";
+  } else {
+    document.getElementById("mean").textContent = mean(history).toLocaleString(undefined,{maximumFractionDigits:2}) + " ルーブル";
+    document.getElementById("std").textContent = stdev(history).toLocaleString(undefined,{maximumFractionDigits:2}) + " ルーブル";
+  }
+}
+
+/* ------------------------------------------------------------
+   ドットプロットの描画（canvas）
+   x軸：紙幣の金額（連続量として配置）
+   黒い点：引いた紙幣（同額は積み上げる）
+   青い縦線：平均値
+   赤い半透明の帯：平均 ± 標準偏差
+------------------------------------------------------------- */
+const canvas = document.getElementById("plot");
+const ctx = canvas.getContext("2d");
+
+const PLOT = {
+  marginLeft: 46,
+  marginRight: 20,
+  marginTop: 14,
+  marginBottom: 40,
+};
+const AXIS_MAX = 5500; // 軸の右端（5000ルーブルより少し余白を持たせる）
+
+function xScale(value){
+  const w = canvas.width - PLOT.marginLeft - PLOT.marginRight;
+  return PLOT.marginLeft + (value / AXIS_MAX) * w;
+}
+
+function drawPlot(){
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const plotTop = PLOT.marginTop;
+  const plotBottom = H - PLOT.marginBottom;
+  const plotHeight = plotBottom - plotTop;
+
+  // --- 平均±標準偏差の赤い帯（背面に描く） ---
+  if (history.length > 0){
+    const m = mean(history);
+    const sd = stdev(history);
+    const xLow = xScale(Math.max(0, m - sd));
+    const xHigh = xScale(Math.min(AXIS_MAX, m + sd));
+    ctx.fillStyle = "rgba(224,71,63,0.22)";
+    ctx.fillRect(xLow, plotTop, Math.max(1,xHigh-xLow), plotHeight);
+    ctx.strokeStyle = "rgba(224,71,63,0.55)";
+    ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(xLow, plotTop); ctx.lineTo(xLow, plotBottom); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xHigh, plotTop); ctx.lineTo(xHigh, plotBottom); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // --- x軸 ---
+  ctx.strokeStyle = "#555";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PLOT.marginLeft, plotBottom);
+  ctx.lineTo(W - PLOT.marginRight, plotBottom);
+  ctx.stroke();
+
+  ctx.fillStyle = "#333";
+  ctx.font = "11px sans-serif";
+  ctx.textAlign = "center";
+  DENOMINATIONS.forEach(d=>{
+    const x = xScale(d.value);
+    ctx.beginPath();
+    ctx.moveTo(x, plotBottom);
+    ctx.lineTo(x, plotBottom+5);
+    ctx.stroke();
+    ctx.fillText(d.value.toLocaleString(), x, plotBottom+18);
+  });
+  ctx.fillText("金額（ルーブル）", (PLOT.marginLeft + W - PLOT.marginRight)/2, plotBottom+34);
+
+  // --- 黒いドット（積み上げ） ---
+  const maxFreq = Math.max(1, ...DENOMINATIONS.map(d=>countsByValue[d.value]));
+  const dotDiameter = Math.min(14, Math.max(2, (plotHeight-6) / maxFreq));
+
+  ctx.fillStyle = "rgba(15,15,15,0.75)";
+  DENOMINATIONS.forEach(d=>{
+    const n = countsByValue[d.value];
+    const x = xScale(d.value);
+    for (let i=0;i<n;i++){
+      const y = plotBottom - dotDiameter*0.6 - i*dotDiameter;
+      if (y < plotTop) break; // 収まりきらない分は密度で表現（重なり許容）
+      ctx.beginPath();
+      ctx.arc(x, y, dotDiameter*0.42, 0, Math.PI*2);
+      ctx.fill();
+    }
+  });
+
+  // --- 青い平均線 ---
+  if (history.length > 0){
+    const m = mean(history);
+    const xM = xScale(m);
+    ctx.strokeStyle = "#2f6fed";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xM, plotTop);
+    ctx.lineTo(xM, plotBottom);
+    ctx.stroke();
+  }
+}
+
+/* ------------------------------------------------------------
+   抽選の実行
+------------------------------------------------------------- */
+function drawTimes(n){
+  let last = null;
+  for (let i=0;i<n;i++){
+    const d = drawOneNote();
+    history.push(d.value);
+    countsByValue[d.value]++;
+    last = d;
+  }
+  updateStatsPanel();
+  drawPlot();
+  if (last) showBill(last);
+}
+
+document.getElementById("btn1").addEventListener("click", ()=>drawTimes(1));
+document.getElementById("btn10").addEventListener("click", ()=>drawTimes(10));
+document.getElementById("btn100").addEventListener("click", ()=>drawTimes(100));
+document.getElementById("resetBtn").addEventListener("click", ()=>{
+  history = [];
+  DENOMINATIONS.forEach(d => countsByValue[d.value] = 0);
+  updateStatsPanel();
+  drawPlot();
+});
+
+// 初期描画
+updateStatsPanel();
+drawPlot();
+</script>
+</body>
+</html>
